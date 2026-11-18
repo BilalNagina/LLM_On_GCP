@@ -21,4 +21,6 @@ service-account*.json
 
 # Local artefacts
 results/raw/tf-*.log
-video/
+video/*
+!video/LLM_on_GKE_walkthrough.mp4
+!video/LLM_on_GKE_walkthrough.srt

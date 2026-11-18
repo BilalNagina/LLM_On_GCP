@@ -1,0 +1,335 @@
+1
+00:00:00,650 --> 00:00:07,409
+This is a walkthrough of a small LLM serving platform I built on Google Kubernetes Engine in one day.
+
+2
+00:00:07,409 --> 00:00:13,347
+It runs open-weights Qwen models with llama.cpp on a private GKE cluster.
+
+3
+00:00:13,347 --> 00:00:18,464
+Everything you'll see was measured, including the parts that didn't work the way I expected.
+
+4
+00:00:20,078 --> 00:00:21,525
+First, the scope.
+
+5
+00:00:21,525 --> 00:00:24,246
+This is a lab, not a production system.
+
+6
+00:00:24,246 --> 00:00:32,020
+It runs on CPU only, on spot e2-standard-4 nodes, because GPU quota wasn't available on the day.
+
+7
+00:00:32,020 --> 00:00:39,780
+The models are small: Qwen 2.5 at half a billion and one and a half billion parameters, quantized to 4 bits.
+
+8
+00:00:39,780 --> 00:00:48,569
+The goals were to deploy a model on GKE properly, swap model versions under load, test autoscaling, and write down exactly what happened.
+
+9
+00:00:50,186 --> 00:00:56,177
+Here's everything that exists in the project, taken from gcloud and kubectl listings.
+
+10
+00:00:56,177 --> 00:01:04,003
+Terraform created the network: a custom VPC with one subnet and secondary ranges for pods and services.
+
+11
+00:01:04,003 --> 00:01:14,172
+It also created the GKE cluster, the spot node pool, an Artifact Registry repository, a versioned Cloud Storage bucket, and two service accounts.
+
+12
+00:01:14,172 --> 00:01:27,805
+GKE generated the rest from configuration: three firewall rules, and the whole load balancer, meaning a forwarding rule, a URL map, backend services, health checks, and a network endpoint group.
+
+13
+00:01:27,805 --> 00:01:31,724
+One Cloud Build run imported the images and the models.
+
+14
+00:01:31,724 --> 00:01:36,125
+There's no Cloud NAT, no other virtual machines, and no Cloud Run.
+
+15
+00:01:36,125 --> 00:01:47,675
+Two things exist that I didn't create: the default VPC, whose firewall allows SSH and RDP from anywhere, and the default Compute Engine service account with the Editor role.
+
+16
+00:01:47,675 --> 00:01:51,021
+The lab uses neither, and both should be removed.
+
+17
+00:01:52,646 --> 00:01:54,666
+This is how the pieces fit together.
+
+18
+00:01:54,666 --> 00:01:59,926
+On the left is the internet: the public model and image sources, and a client.
+
+19
+00:01:59,926 --> 00:02:07,804
+Inside the project there's a load balancer built by the GKE Gateway, and a VPC with no route to the internet.
+
+20
+00:02:07,804 --> 00:02:14,249
+Inside that VPC is a private GKE cluster running two llama.cpp pods.
+
+21
+00:02:14,249 --> 00:02:25,707
+Blue arrows are the request path, green arrows the import path, and the dotted grey lines show how nodes and pods reach the registry and the bucket through identity, not keys.
+
+22
+00:02:27,314 --> 00:02:29,021
+Let's follow one request.
+
+23
+00:02:29,021 --> 00:02:32,849
+The client sends a POST to the gateway's public IP address.
+
+24
+00:02:32,849 --> 00:02:40,480
+That address belongs to a global external Application Load Balancer that GKE created from the Gateway object.
+
+25
+00:02:40,480 --> 00:02:43,683
+The HTTPRoute becomes the URL map.
+
+26
+00:02:43,683 --> 00:02:49,907
+Only slash v1 and slash health are routed, so the root path returns 404.
+
+27
+00:02:49,907 --> 00:02:59,529
+The backend service has a 120-second timeout, because generation is slower than the 30-second default, and 45 seconds of connection draining.
+
+28
+00:02:59,529 --> 00:03:10,649
+Its backend is a container-NATive network endpoint group, so the load balancer sends traffic straight to pod IP addresses, and only to pods that pass the health check on slash health.
+
+29
+00:03:10,649 --> 00:03:16,573
+The pod generates the answer from a model held in memory, and the response comes back the same way.
+
+30
+00:03:16,573 --> 00:03:22,849
+Here's a real request: model v2 answered correctly, at about 17 tokens per second.
+
+31
+00:03:24,470 --> 00:03:25,969
+Now the import path.
+
+32
+00:03:25,969 --> 00:03:30,071
+The nodes have no internet access, so nothing is pulled at runtime.
+
+33
+00:03:30,071 --> 00:03:39,602
+A Cloud Build job, running as its own service account, downloaded the llama.cpp server image, the k6 image, and both model files.
+
+34
+00:03:39,602 --> 00:03:44,133
+It pushed the images to Artifact Registry and recorded their digests.
+
+35
+00:03:44,133 --> 00:03:48,560
+The deployment references the server image by digest, not by tag.
+
+36
+00:03:48,560 --> 00:03:57,089
+Each model file was checked against the SHA-256 hash published by Hugging Face before upload, so a mismatch fails the build.
+
+37
+00:03:57,089 --> 00:04:07,011
+When a pod starts, the GCS FUSE sidecar mounts the bucket read-only, authenticated as the pod's Kubernetes service account through Workload Identity.
+
+38
+00:04:08,618 --> 00:04:10,963
+The security design follows from that.
+
+39
+00:04:10,963 --> 00:04:19,166
+Nodes have private IP addresses only, and with no NAT there's no egress; you can see no external IPs and no routers.
+
+40
+00:04:19,166 --> 00:04:22,812
+The control plane accepts connections from one IP address.
+
+41
+00:04:22,812 --> 00:04:28,958
+The node service account has only the default node role, plus read access to one repository.
+
+42
+00:04:28,958 --> 00:04:36,406
+The model server's Kubernetes service account can read one bucket, granted directly to its Workload Identity principal.
+
+43
+00:04:36,406 --> 00:04:40,026
+There's no Google service account and no key file anywhere.
+
+44
+00:04:40,026 --> 00:04:49,049
+The namespace enforces the restricted Pod Security standard: non-root, a read-only root filesystem, and all capabilities dropped.
+
+45
+00:04:49,049 --> 00:04:58,737
+The gaps: the gateway is plain HTTP, with no authentication and no Cloud Armor, plus the default VPC and the Editor grant I mentioned.
+
+46
+00:05:00,374 --> 00:05:05,949
+The main experiment was swapping the model from v1 to v2 while k6 sends load.
+
+47
+00:05:05,949 --> 00:05:13,123
+Eight runs, two thousand and thirty-one requests, and five failures, all connection EOFs.
+
+48
+00:05:13,123 --> 00:05:22,029
+They didn't follow the obvious pattern: a run without a pre-stop hook had zero failures, while a run with a 45-second pre-stop had two.
+
+49
+00:05:22,029 --> 00:05:30,350
+My very first runs also had a test bug: the autoscaler wasn't actually pinned, so capacity changed in the middle of the test.
+
+50
+00:05:30,350 --> 00:05:32,225
+I fixed that and re-ran.
+
+51
+00:05:33,842 --> 00:05:43,232
+Load tests couldn't explain it, so I ran a targeted experiment: send one long generation to a pod, then delete that pod a few seconds in.
+
+52
+00:05:43,232 --> 00:05:46,812
+With no pre-stop hook, the request never completed.
+
+53
+00:05:46,812 --> 00:05:55,992
+It hung for 85 seconds, which is the 90-second grace period minus the four seconds before deletion, until the container was killed.
+
+54
+00:05:55,992 --> 00:06:03,193
+With a 45-second pre-stop, the same request returned all 400 tokens in about 22 seconds.
+
+55
+00:06:03,193 --> 00:06:08,609
+So llama.cpp stops generating on SIGTERM but leaves the connection open.
+
+56
+00:06:08,609 --> 00:06:13,805
+The pre-stop hook has to outlast endpoint removal plus the longest generation.
+
+57
+00:06:15,422 --> 00:06:19,851
+That still didn't explain the two failures with a 45-second pre-stop.
+
+58
+00:06:19,851 --> 00:06:21,153
+The pod events did.
+
+59
+00:06:21,153 --> 00:06:27,260
+Both failures happened at the exact second the old pod was killed, 90 seconds after deletion.
+
+60
+00:06:27,260 --> 00:06:32,286
+So it was still receiving new requests 45 seconds after leaving the Service.
+
+61
+00:06:32,286 --> 00:06:35,710
+Removing an endpoint only affects new connections.
+
+62
+00:06:35,710 --> 00:06:42,312
+k6 reuses keep-alive connections, and connection tracking kept sending them to the termiNATing pod.
+
+63
+00:06:42,312 --> 00:06:48,210
+With connection reuse turned off, the next run had zero failures in 95 requests.
+
+64
+00:06:48,210 --> 00:06:51,882
+One run supports the explaNATion, but it doesn't prove it.
+
+65
+00:06:51,882 --> 00:07:00,098
+The real fix is something that drains existing connections, such as a proxy in front of llama.cpp, or the load balancer path.
+
+66
+00:07:00,098 --> 00:07:03,223
+So I can't claim zero-downtime model swaps yet.
+
+67
+00:07:04,850 --> 00:07:05,672
+Scaling.
+
+68
+00:07:05,672 --> 00:07:15,268
+With twelve concurrent users, CPU reached 87 percent of the pod's request within 22 seconds, and the autoscaler asked for a third pod.
+
+69
+00:07:15,268 --> 00:07:23,042
+That pod was ready about 96 seconds later, most of it spent loading the 1.1-gigabyte model from Cloud Storage.
+
+70
+00:07:23,042 --> 00:07:39,253
+CPU then settled at 63 percent, inside the autoscaler's tolerance, so scaling stopped, even though p95 latency had risen to about 12 seconds, roughly two and a half to four and a half times the earlier four-user runs.
+
+71
+00:07:39,253 --> 00:07:42,091
+All 486 requests succeeded.
+
+72
+00:07:42,091 --> 00:07:48,237
+Earlier in the day, the cluster autoscaler added spot nodes from one to four and hit its maximum.
+
+73
+00:07:48,237 --> 00:07:54,891
+The lesson: CPU is a poor scaling signal for LLM serving, and queue depth is a better one.
+
+74
+00:07:56,510 --> 00:07:57,449
+What I learned.
+
+75
+00:07:57,449 --> 00:08:01,720
+Graceful shutdown is the server's job, not just Kubernetes'.
+
+76
+00:08:01,720 --> 00:08:07,631
+Size the pre-stop hook to the workload, which for LLMs means the longest generation.
+
+77
+00:08:07,631 --> 00:08:11,928
+When load tests don't add up, run a small deterministic experiment.
+
+78
+00:08:11,928 --> 00:08:13,933
+Check your test's own conditions.
+
+79
+00:08:13,933 --> 00:08:19,337
+Pin images by digest: llama.cpp renamed a flag between builds.
+
+80
+00:08:19,337 --> 00:08:25,874
+And read every Terraform plan: I re-applied with auto-approve, and it replaced the whole cluster.
+
+81
+00:08:25,874 --> 00:08:30,066
+That mistake, and every other one, is in the troubleshooting log.
+
+82
+00:08:31,706 --> 00:08:39,924
+Not covered yet: GPU serving, queue-depth autoscaling, blue-green routing, CI/CD, and TLS.
+
+83
+00:08:39,924 --> 00:08:46,968
+The Terraform, the manifests, the test scripts, the raw results, and the full log are in the repository.
+
+84
+00:08:46,968 --> 00:08:48,114
+Thanks for watching.

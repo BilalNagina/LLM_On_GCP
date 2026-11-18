@@ -8,6 +8,11 @@ result measured. Built and tested on 2026-11-18.
 > `e2-standard-4` nodes. **No GPUs**: GPU quota wasn't available on the day. This is a
 > lab, not a production system. Every number below comes from the runs in `results/`.
 
+**Video walkthrough (8:49):** [`video/LLM_on_GKE_walkthrough.mp4`](video/LLM_on_GKE_walkthrough.mp4),
+covering the architecture, the request and import paths, the security design, and the
+rollout and scaling results. English subtitles are embedded and also in
+[`.srt`](video/LLM_on_GKE_walkthrough.srt).
+
 ## Contents
 
 - [Overview](#overview)
