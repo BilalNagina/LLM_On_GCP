@@ -1,0 +1,35 @@
+time="2026-11-18T07:33:09Z" level=warning msg="Request Failed" error="Post \"http://llm-server.llm.svc.cluster.local/v1/chat/completions\": EOF"
+time="2026-11-18T07:33:09Z" level=warning msg="Request Failed" error="Post \"http://llm-server.llm.svc.cluster.local/v1/chat/completions\": EOF"
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 389    1.513752/s
+    checks_succeeded...: 99.48% 387 out of 389
+    checks_failed......: 0.51%  2 out of 389
+
+    ✗ status is 200
+      ↳  99% — ✓ 387 / ✗ 2
+
+    CUSTOM
+    failed_requests................: 2      0.007783/s
+    served_by_version..............: 387    1.505969/s
+
+    HTTP
+    http_req_duration..............: avg=2.56s med=2.17s p(95)=2.65s p(99)=4.43s max=1m31s
+      { expected_response:true }...: avg=2.11s med=2.17s p(95)=2.62s p(99)=4.3s  max=4.83s
+    http_req_failed................: 0.51%  2 out of 389
+    http_reqs......................: 389    1.513752/s
+
+    EXECUTION
+    iteration_duration.............: avg=2.56s med=2.17s p(95)=2.65s p(99)=4.43s max=1m31s
+    iterations.....................: 389    1.513752/s
+    vus............................: 2      min=2        max=4
+    vus_max........................: 4      min=4        max=4
+
+    NETWORK
+    data_received..................: 390 kB 1.5 kB/s
+    data_sent......................: 110 kB 427 B/s
+
+
+

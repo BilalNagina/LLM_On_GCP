@@ -1,0 +1,24 @@
+# Terraform state, plans, variables and provider cache
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+tfplan
+*.tfplan
+crash.log
+
+# Credentials and cluster access
+.env
+*.env
+kubeconfig
+kubeconfig.y*ml
+*.kubeconfig
+*.pem
+*.key
+*-key.json
+*credentials*.json
+service-account*.json
+
+# Local artefacts
+results/raw/tf-*.log
+video/

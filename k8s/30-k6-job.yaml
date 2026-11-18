@@ -1,0 +1,48 @@
+# Rendered by scripts/loadtest.sh: ${REGISTRY} ${RUN_ID} ${VUS} ${DURATION} ${MAX_TOKENS}
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: k6-${RUN_ID}
+  namespace: llm
+  labels:
+    app: k6
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 3600
+  template:
+    metadata:
+      labels:
+        app: k6
+    spec:
+      restartPolicy: Never
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 12345
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: k6
+          image: ${REGISTRY}/k6:1.8.3
+          args: ["run", "--quiet", "/scripts/chat.js"]
+          env:
+            - { name: TARGET, value: "http://llm-server.llm.svc.cluster.local" }
+            - { name: VUS, value: "${VUS}" }
+            - { name: DURATION, value: "${DURATION}" }
+            - { name: MAX_TOKENS, value: "${MAX_TOKENS}" }
+            - { name: NO_REUSE, value: "${NO_REUSE}" }
+          resources:
+            requests: { cpu: 250m, memory: 128Mi }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          volumeMounts:
+            - { name: scripts, mountPath: /scripts }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - name: scripts
+          configMap:
+            name: k6-scripts
+        - name: tmp
+          emptyDir: {}

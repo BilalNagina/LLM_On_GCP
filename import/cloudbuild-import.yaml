@@ -1,0 +1,53 @@
+# Controlled import: the cluster has no internet egress, so every image and
+# model file is brought in here, checksum-verified, and stored in
+# Artifact Registry / GCS. Run with:  scripts/import.sh
+substitutions:
+  _REGISTRY: ""
+  _BUCKET: ""
+  _LLAMA_SRC: ghcr.io/ggml-org/llama.cpp:server
+  _K6_SRC: docker.io/grafana/k6:1.8.3
+
+steps:
+  # ---- images ---------------------------------------------------------------
+  - id: mirror-images
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        for pair in "${_LLAMA_SRC}|llama-cpp-server:mirrored" "${_K6_SRC}|k6:1.8.3"; do
+          src="$${pair%%|*}"; dst="${_REGISTRY}/$${pair##*|}"
+          docker pull "$$src"
+          docker tag "$$src" "$$dst"
+          docker push "$$dst"
+          docker inspect --format='{{range .RepoDigests}}{{println .}}{{end}}' "$$dst" \
+            | grep -F "${_REGISTRY}" | tee -a /workspace/digests.txt
+        done
+
+  # ---- models: download, verify SHA-256 against the publisher, store --------
+  - id: import-models
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        set -euo pipefail
+        import() {  # repo file sha256 gcs_path
+          curl -fsSL -o model.gguf "https://huggingface.co/$$1/resolve/main/$$2"
+          echo "$$3  model.gguf" | sha256sum -c -
+          gcloud storage cp model.gguf "gs://${_BUCKET}/$$4" \
+            --custom-metadata="source=hf://$$1/$$2,sha256=$$3"
+          rm -f model.gguf
+        }
+        import Qwen/Qwen2.5-0.5B-Instruct-GGUF qwen2.5-0.5b-instruct-q4_k_m.gguf \
+          74a4da8c9fdbcd15bd1f6d01d621410d31c6fc00986f5eb687824e7b93d7a9db \
+          models/v1/model.gguf
+        import Qwen/Qwen2.5-1.5B-Instruct-GGUF qwen2.5-1.5b-instruct-q4_k_m.gguf \
+          6a1a2eb6d15622bf3c96857206351ba97e1af16c30d7a74ee38970e434e9407e \
+          models/v2/model.gguf
+        gcloud storage cp /workspace/digests.txt "gs://${_BUCKET}/import/image-digests.txt"
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1800s

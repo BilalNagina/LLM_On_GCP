@@ -1,0 +1,178 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#1a56db"/>
+    </marker>
+    <marker id="arrg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0f766e"/>
+    </marker>
+    <marker id="arrs" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/>
+    </marker>
+    <style>
+      .t  { font-size: 17px; font-weight: 600; fill: #111827; }
+      .s  { font-size: 14px; fill: #374151; }
+      .xs { font-size: 12.5px; fill: #4b5563; }
+      .lbl{ font-size: 14px; font-weight: 600; fill: #6b7280; letter-spacing: .3px; }
+      .box{ fill: #ffffff; stroke: #cbd5e1; stroke-width: 1.5; }
+      .num{ font-size: 13px; font-weight: 700; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect width="1600" height="1000" fill="#f8fafc"/>
+  <text x="30" y="44" font-size="26" font-weight="700" fill="#0f172a">LLM inference on GKE · architecture (CPU lab)</text>
+  <text x="30" y="70" class="s">Request path ① → ⑥ (blue) · model and image import Ⓐ → Ⓒ (green) · access via identity (grey, dotted)</text>
+
+  <!-- ===== Internet column ===== -->
+  <text x="30" y="118" class="lbl">INTERNET</text>
+  <rect x="30" y="130" width="230" height="110" rx="10" class="box"/>
+  <text x="46" y="160" class="t">Public sources</text>
+  <text x="46" y="184" class="s">Hugging Face (GGUF files)</text>
+  <text x="46" y="204" class="s">ghcr.io · llama.cpp server</text>
+  <text x="46" y="224" class="s">Docker Hub · grafana/k6</text>
+
+  <rect x="30" y="420" width="230" height="90" rx="10" class="box"/>
+  <text x="46" y="452" class="t">Client</text>
+  <text x="46" y="476" class="s">HTTP POST</text>
+  <text x="46" y="496" class="s">/v1/chat/completions</text>
+
+  <!-- ===== GCP project ===== -->
+  <rect x="290" y="96" width="1290" height="884" rx="14" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-dasharray="7 5"/>
+  <text x="1565" y="122" class="lbl" text-anchor="end">GCP PROJECT &lt;PROJECT_ID&gt; · us-central1</text>
+
+  <!-- Cloud Build -->
+  <rect x="320" y="140" width="250" height="110" rx="10" class="box" stroke="#0f766e"/>
+  <text x="336" y="170" class="t">Cloud Build</text>
+  <text x="336" y="194" class="s">controlled import (runs once)</text>
+  <text x="336" y="214" class="s">SHA-256 vs publisher hash</text>
+  <text x="336" y="234" class="xs">runs as SA image-mirror</text>
+
+  <!-- Artifact Registry -->
+  <rect x="640" y="140" width="270" height="110" rx="10" class="box"/>
+  <text x="656" y="170" class="t">Artifact Registry  "llm"</text>
+  <text x="656" y="194" class="s">llama-cpp-server  @sha256:c62b…</text>
+  <text x="656" y="214" class="s">k6  @sha256:1164…</text>
+  <text x="656" y="234" class="xs">pulled by digest, never by tag</text>
+
+  <!-- GCS -->
+  <rect x="980" y="140" width="280" height="110" rx="10" class="box"/>
+  <text x="996" y="170" class="t">Cloud Storage  &lt;BUCKET_NAME&gt;</text>
+  <text x="996" y="194" class="s">models/v1/model.gguf  (0.5B, 491 MB)</text>
+  <text x="996" y="214" class="s">models/v2/model.gguf  (1.5B, 1.1 GB)</text>
+  <text x="996" y="234" class="xs">versioned · public access prevented</text>
+
+  <!-- IAM column -->
+  <rect x="1300" y="140" width="260" height="400" rx="10" class="box"/>
+  <text x="1316" y="170" class="t">Identities (least privilege)</text>
+  <text x="1316" y="200" class="s" font-weight="600">gke-nodes (node SA)</text>
+  <text x="1316" y="220" class="xs">container.defaultNodeServiceAccount</text>
+  <text x="1316" y="238" class="xs">artifactregistry.reader (repo llm)</text>
+  <text x="1316" y="270" class="s" font-weight="600">image-mirror (Cloud Build SA)</text>
+  <text x="1316" y="290" class="xs">artifactregistry.writer (repo llm)</text>
+  <text x="1316" y="308" class="xs">storage.objectAdmin (bucket)</text>
+  <text x="1316" y="326" class="xs">logging.logWriter</text>
+  <text x="1316" y="358" class="s" font-weight="600">KSA llm/llm-server</text>
+  <text x="1316" y="378" class="xs">storage.objectViewer (bucket)</text>
+  <text x="1316" y="396" class="xs">granted to the Workload Identity</text>
+  <text x="1316" y="414" class="xs">principal directly: no Google SA,</text>
+  <text x="1316" y="432" class="xs">no keys</text>
+  <line x1="1316" y1="452" x2="1544" y2="452" stroke="#e5e7eb"/>
+  <text x="1316" y="476" class="s" font-weight="600">Budget alert  $20</text>
+  <text x="1316" y="496" class="xs">25% / 50% / 100% thresholds</text>
+  <text x="1316" y="520" class="xs">Terraform: everything except budget</text>
+
+  <!-- Load balancer -->
+  <rect x="320" y="290" width="590" height="140" rx="10" class="box" stroke="#1a56db"/>
+  <text x="336" y="318" class="t">Global external Application Load Balancer</text>
+  <text x="336" y="338" class="xs">created and managed by GKE from the Gateway API objects (gke-l7-global-external-managed)</text>
+  <text x="336" y="366" class="s">forwarding rule :80  →  URL map = HTTPRoute (/v1/*, /health; "/" returns 404)</text>
+  <text x="336" y="390" class="s">→  backend service: timeout 120 s · connection draining 45 s (GCPBackendPolicy)</text>
+  <text x="336" y="414" class="s">→  health check HTTP /health :8080 (HealthCheckPolicy)</text>
+
+  <!-- VPC -->
+  <rect x="320" y="460" width="950" height="500" rx="12" fill="#eef2ff" fill-opacity=".45" stroke="#6366f1" stroke-width="1.5"/>
+  <text x="352" y="482" class="lbl" fill="#4338ca">VPC llm-vpc · subnet 10.10.0.0/20 · pods 10.20.0.0/16 · svc 10.30.0.0/20</text>
+  <text x="352" y="500" class="xs">no Cloud Router / Cloud NAT → no internet egress · Private Google Access on</text>
+  <text x="352" y="514" class="xs">firewall: allow LB + health-check ranges 130.211.0.0/22, 35.191.0.0/16</text>
+
+  <!-- GKE cluster -->
+  <rect x="345" y="524" width="900" height="421" rx="12" fill="#ffffff" fill-opacity=".7" stroke="#94a3b8" stroke-width="1.5"/>
+  <text x="362" y="548" class="t">Private GKE Standard cluster · zonal us-central1-a</text>
+  <text x="362" y="566" class="xs">private nodes (no external IPs) · control plane only from &lt;AUTHORIZED_IP&gt;/32</text>
+  <text x="362" y="582" class="xs">Workload Identity · GCS FUSE CSI driver · Managed Prometheus</text>
+
+  <!-- NEG -->
+  <rect x="370" y="612" width="190" height="100" rx="10" class="box" stroke="#1a56db"/>
+  <text x="386" y="640" class="t">NEG</text>
+  <text x="386" y="662" class="s">GCE_VM_IP_PORT</text>
+  <text x="386" y="682" class="s">pod IPs as endpoints</text>
+  <text x="386" y="700" class="xs">container-native LB</text>
+
+  <!-- Node pool -->
+  <rect x="590" y="590" width="630" height="240" rx="10" fill="#f8fafc" stroke="#cbd5e1" stroke-width="1.5"/>
+  <text x="606" y="614" class="s" font-weight="600">node pool cpu-inference · spot e2-standard-4</text>
+  <text x="952" y="614" class="s" font-weight="600">1–4 nodes · Shielded VMs</text>
+
+  <rect x="610" y="630" width="290" height="185" rx="10" class="box"/>
+  <text x="626" y="656" class="t">llm-server pod</text>
+  <text x="626" y="680" class="s">llama-server :8080 (OpenAI API)</text>
+  <text x="626" y="700" class="s">model v1 or v2, read into RAM</text>
+  <text x="626" y="720" class="s">gke-gcsfuse-sidecar (native sidecar)</text>
+  <text x="626" y="740" class="xs">startup / readiness / liveness: /health</text>
+  <text x="626" y="758" class="xs">preStop sleep 45 s · grace period 90 s</text>
+  <text x="626" y="776" class="xs">non-root · read-only root FS · caps dropped</text>
+  <text x="626" y="794" class="xs">2 CPU / 2 GiB requested</text>
+
+  <rect x="915" y="630" width="290" height="185" rx="10" class="box"/>
+  <text x="931" y="656" class="t">llm-server pod</text>
+  <text x="931" y="680" class="s">same spec, other node</text>
+  <text x="931" y="700" class="s">(topology spread)</text>
+  <text x="931" y="740" class="xs">rollout: maxSurge 1, maxUnavailable 0</text>
+  <text x="931" y="758" class="xs">PDB minAvailable 1</text>
+
+  <!-- bottom row -->
+  <rect x="370" y="850" width="190" height="80" rx="10" class="box"/>
+  <text x="386" y="878" class="t">Service</text>
+  <text x="386" y="900" class="s">ClusterIP :80 → 8080</text>
+  <text x="386" y="918" class="xs">used by in-cluster k6</text>
+
+  <rect x="590" y="850" width="200" height="80" rx="10" class="box"/>
+  <text x="606" y="878" class="t">HPA</text>
+  <text x="606" y="900" class="s">CPU 60% · 2–6 pods</text>
+  <text x="606" y="918" class="xs">+ cluster autoscaler 1–4 nodes</text>
+
+  <rect x="810" y="850" width="200" height="80" rx="10" class="box"/>
+  <text x="826" y="878" class="t">k6 Job</text>
+  <text x="826" y="900" class="s">load tests in-cluster</text>
+  <text x="826" y="918" class="xs">image from Artifact Registry</text>
+
+  <rect x="1030" y="850" width="190" height="80" rx="10" class="box"/>
+  <text x="1046" y="878" class="t">Namespace llm</text>
+  <text x="1046" y="900" class="s">Pod Security</text>
+  <text x="1046" y="918" class="xs">"restricted" enforced</text>
+
+  <!-- ===== Import path (green) ===== -->
+  <path d="M260,190 L318,190" stroke="#0f766e" stroke-width="2.5" fill="none" marker-end="url(#arrg)"/>
+  <circle cx="289" cy="172" r="11" fill="#0f766e"/><text x="284" y="177" class="num">A</text>
+  <path d="M570,195 L638,195" stroke="#0f766e" stroke-width="2.5" fill="none" marker-end="url(#arrg)"/>
+  <circle cx="604" cy="177" r="11" fill="#0f766e"/><text x="599" y="182" class="num">B</text>
+  <path d="M445,140 L445,124 L1120,124 L1120,138" stroke="#0f766e" stroke-width="2.5" fill="none" marker-end="url(#arrg)"/>
+  <circle cx="790" cy="124" r="11" fill="#0f766e"/><text x="785" y="129" class="num">C</text>
+
+  <!-- ===== Identity access (grey dotted) ===== -->
+  <path d="M900,250 L900,264 L940,264 L940,628" stroke="#6b7280" stroke-width="2" stroke-dasharray="5 5" fill="none" marker-end="url(#arrs)"/>
+  <text x="950" y="300" class="xs">image pull by digest</text>
+  <text x="950" y="316" class="xs">(node SA · Private Google Access)</text>
+  <path d="M1180,250 L1180,628" stroke="#6b7280" stroke-width="2" stroke-dasharray="5 5" fill="none" marker-end="url(#arrs)"/>
+  <text x="1170" y="390" class="xs" text-anchor="end">model files: FUSE mount, read-only</text>
+  <text x="1170" y="406" class="xs" text-anchor="end">(KSA via Workload Identity)</text>
+
+  <!-- ===== Request path (blue) ===== -->
+  <path d="M262,465 L300,465 L300,360 L318,360" stroke="#1a56db" stroke-width="2.5" fill="none" marker-start="url(#arr)" marker-end="url(#arr)"/>
+  <circle cx="300" cy="405" r="11" fill="#1a56db"/><text x="295" y="410" class="num">1</text>
+  <path d="M333,430 L333,650 L368,650" stroke="#1a56db" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <circle cx="333" cy="610" r="11" fill="#1a56db"/><text x="328" y="615" class="num">2</text>
+  <path d="M560,662 L608,690" stroke="#1a56db" stroke-width="2.5" fill="none" marker-end="url(#arr)"/>
+  <circle cx="580" cy="660" r="11" fill="#1a56db"/><text x="575" y="665" class="num">3</text>
+  <text x="606" y="845" class="xs" fill="#1a56db">④ llama-server generates · ⑤ response returns NEG → LB · ⑥ client (arrow ① both ways)</text>
+  </svg>

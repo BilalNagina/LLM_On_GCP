@@ -1,0 +1,66 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: llm-gateway
+  namespace: llm
+spec:
+  gatewayClassName: gke-l7-global-external-managed
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: llm-route
+  namespace: llm
+spec:
+  parentRefs:
+    - name: llm-gateway
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /v1/ }
+        - path: { type: Exact, value: /health }
+      backendRefs:
+        - name: llm-server
+          port: 80
+---
+# LB health check uses the model-ready endpoint, not "/".
+apiVersion: networking.gke.io/v1
+kind: HealthCheckPolicy
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  default:
+    checkIntervalSec: 5
+    timeoutSec: 3
+    healthyThreshold: 1
+    unhealthyThreshold: 2
+    config:
+      type: HTTP
+      httpHealthCheck:
+        port: 8080
+        requestPath: /health
+  targetRef:
+    group: ""
+    kind: Service
+    name: llm-server
+---
+# Generation can take longer than the 30 s LB default; drain old endpoints
+# for as long as the pod's preStop (45 s) keeps it serving.
+apiVersion: networking.gke.io/v1
+kind: GCPBackendPolicy
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  default:
+    timeoutSec: 120
+    connectionDraining:
+      drainingTimeoutSec: 45
+  targetRef:
+    group: ""
+    kind: Service
+    name: llm-server

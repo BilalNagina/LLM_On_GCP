@@ -1,0 +1,9 @@
+Created [https://cloudbuild.googleapis.com/v1/projects/<PROJECT_ID>/locations/us-central1/builds/<BUILD_ID>].
+Logs are available at [ https://console.cloud.google.com/cloud-build/builds;region=us-central1/<BUILD_ID>?project=<PROJECT_NUMBER> ].
+
+gcloud builds submit only displays logs from Cloud Storage. To view logs from Cloud Logging, run:
+gcloud beta builds submit
+
+Waiting for build to complete. Polling interval: 1 second(s).
+ID                                    CREATE_TIME                DURATION  SOURCE  IMAGES  STATUS
+<BUILD_ID>  2026-11-18T06:38:53+00:00  1M44S     -       -       SUCCESS

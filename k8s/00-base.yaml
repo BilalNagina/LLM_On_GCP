@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: llm
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+---
+# Bound to roles/storage.objectViewer on the models bucket via Workload
+# Identity Federation (IAM principal, see terraform/main.tf). No keys.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: llm-server
+  namespace: llm
+automountServiceAccountToken: false
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: llm-server

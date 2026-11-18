@@ -1,0 +1,164 @@
+# Model version is selected by MODEL_VERSION (v1 = Qwen2.5-0.5B, v2 = Qwen2.5-1.5B).
+# Rendered by scripts/deploy.sh with envsubst:
+#   LLAMA_IMAGE BUCKET MODEL_VERSION PRESTOP_SECONDS HPA_MIN HPA_MAX
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  replicas: 2
+  revisionHistoryLimit: 5
+  minReadySeconds: 10
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0 # never drop below current capacity during a model swap
+  selector:
+    matchLabels:
+      app: llm-server
+  template:
+    metadata:
+      labels:
+        app: llm-server
+        model-version: ${MODEL_VERSION}
+      annotations:
+        gke-gcsfuse/volumes: "true"
+        gke-gcsfuse/cpu-request: "100m"
+        gke-gcsfuse/memory-request: "128Mi"
+    spec:
+      serviceAccountName: llm-server
+      terminationGracePeriodSeconds: 90
+      nodeSelector:
+        workload: llm-cpu
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: llm-server
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: llama-server
+          image: ${LLAMA_IMAGE} # pinned by digest from the import step
+          # llama.cpp's parser rejects --flag=value; flag and value must be separate.
+          args:
+            - --host
+            - 0.0.0.0
+            - --port
+            - "8080"
+            - --model
+            - /models/models/${MODEL_VERSION}/model.gguf
+            - --alias
+            - qwen-${MODEL_VERSION}
+            - --threads
+            - "2"
+            - --parallel
+            - "2"
+            - --ctx-size
+            - "4096"
+            # Read weights into RAM instead of mmap over GCS FUSE. This build
+            # (12464) replaced --no-mmap with --load-mode.
+            - --load-mode
+            - none
+            - --metrics
+          ports:
+            - name: http
+              containerPort: 8080
+          resources:
+            requests:
+              cpu: "2"
+              memory: 2Gi
+            limits:
+              memory: 3Gi
+          startupProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 60
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+            failureThreshold: 2
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 15
+            failureThreshold: 4
+          lifecycle:
+            # llama-server stops generating on SIGTERM and leaves the connection
+            # hanging until SIGKILL (measured: an in-flight request hung 85 s).
+            # So preStop must outlast endpoint removal AND the longest generation;
+            # terminationGracePeriodSeconds (90) must exceed preStop.
+            preStop:
+              exec:
+                command: ["sleep", "${PRESTOP_SECONDS}"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: models
+              mountPath: /models
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: models
+          csi:
+            driver: gcsfuse.csi.storage.gke.io
+            readOnly: true
+            volumeAttributes:
+              bucketName: ${BUCKET}
+              mountOptions: "implicit-dirs,uid=1000,gid=1000"
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  selector:
+    app: llm-server
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: llm-server
+  namespace: llm
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: llm-server
+  minReplicas: ${HPA_MIN}
+  maxReplicas: ${HPA_MAX}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 0
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 120

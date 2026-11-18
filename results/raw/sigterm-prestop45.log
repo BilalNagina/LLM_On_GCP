@@ -1,0 +1,5 @@
+deployment "llm-server" successfully rolled out
+target: pod/llm-server-6df7d8d8c7-6cd8v  preStop=45s
+deleting pod at +6.172s
+result: 200 21.897651 curl exit 0 
+response: complete, 400 tokens generated, finish_reason=length
