@@ -259,3 +259,9 @@ docs/          architecture diagram, resource inventory, troubleshooting log
 **Not covered yet:** GPU serving (vLLM, quantization against VRAM limits),
 queue-depth autoscaling, blue-green via HTTPRoute weights, CI/CD (GitHub Actions →
 Workload Identity Federation → Argo CD), TLS / Cloud Armor, and a draining proxy.
+
+https://github.com/user-attachments/assets/1eb1102b-ee31-4b20-85af-f514a1b43f1d
+
+
+
+
